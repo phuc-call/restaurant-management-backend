@@ -356,7 +356,6 @@ public class PaymentServiceImpl {
     @Transactional
     public void confirmMockMomo(Long orderId) {
 
-        // 1️⃣ Lấy Order
         Order order = orderRepo.findById(orderId)
                 .orElseThrow(() -> new APIException("Order not found"));
 
@@ -370,7 +369,7 @@ public class PaymentServiceImpl {
             throw new APIException("Cart is empty");
         }
 
-        // 2️⃣ CartItem → OrderItem
+
         for (CartItem ci : cart.getCartItems()) {
             OrderItem oi = new OrderItem();
             oi.setOrder(order);
@@ -382,20 +381,20 @@ public class PaymentServiceImpl {
             orderItemRepo.save(oi);
         }
 
-        // 3️⃣ Update Order
+
         order.setPaymentMethod(PaymentMethod.VNPAY);
         order.setPaymentStatus(PaymentStatus.SUCCESS);
         order.setStatus(OrderStatus.WAITING);
         order.setPaidAt(LocalDateTime.now());
         orderRepo.save(order);
 
-        // 4️⃣ Clear Cart
+
         cartItemRepo.deleteAll(cart.getCartItems());
         cart.getCartItems().clear();
         cart.setTotalPrice(BigDecimal.ZERO);
         cartRepo.save(cart);
 
-        // 5️⃣ Realtime cho cashier
+
         messagingTemplate.convertAndSend(
                 "/topic/cashier",
                 Map.of(

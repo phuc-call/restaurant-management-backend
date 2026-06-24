@@ -80,7 +80,6 @@ public class RestaurantTableServiceImpl implements RestaurantTableService {
 
         String qrContent = baseUrl + "/menu?token=" + saved.getAccessToken();
 
-
         saved.setQrUrl(qrContent);
 
         byte[] qrBytes = qrService.generateQRCode(qrContent, 300, 300);

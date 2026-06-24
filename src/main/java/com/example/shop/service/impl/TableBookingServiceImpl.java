@@ -28,6 +28,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.Table;
 import org.modelmapper.ModelMapper;
 import org.modelmapper.internal.bytebuddy.implementation.bytecode.Throw;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,7 +49,6 @@ import java.util.*;
 @Service
 @Transactional
 public class TableBookingServiceImpl implements TableBookingService {
-
     @Autowired
     TableBookingRepo tableBookingRepo;
     @Autowired
@@ -57,10 +57,6 @@ public class TableBookingServiceImpl implements TableBookingService {
     ModelMapper modelMapper;
     @Autowired
     SimpMessagingTemplate messagingTemplate;
-    @Autowired
-    ObjectMapper objectMapper;
-    @Autowired
-    ActivityRepo activityRepo;
     @Autowired
     ActivityLogService activityLogService;
     @Autowired
@@ -72,9 +68,18 @@ public class TableBookingServiceImpl implements TableBookingService {
     @Autowired
     private StaffStatusValidator staffStatusValidator;
 
-
-
     private static final int GRACE_MINUTES = 15;
+
+    private void webSocket(String event, Object data) {
+        messagingTemplate.convertAndSend(
+                "/topic/booking",
+                Map.of(
+                        "event", event,
+                        "data", data
+                )
+        );
+    }
+
 
     @Override
     @Transactional
@@ -92,17 +97,25 @@ public class TableBookingServiceImpl implements TableBookingService {
                     "Chỉ được đặt bàn trong vòng " + MAX_BOOKING_DAYS + " ngày tới"
             );
         }
-        if(request.getNumberOfGuests()>100){
+        if (request.getNumberOfGuests() > 100) {
             throw new APIException("Số lượng khách không hợp lệ");
         }
-        if(request.getCustomerName().length()>30){
+        if (request.getCustomerName().length() > 30) {
             throw new APIException("Tên khách hàng không hợp lệ");
         }
-        List<RestaurantTable>tables;
+
+        int count = 0;
+        List<TableBooking> tableBookings = tableBookingRepo.findByCustomerPhone(request.getCustomerPhone());
+        for (TableBooking tableBooking : tableBookings) {
+            if (tableBooking.getBookingTime().isAfter(LocalDateTime.now())){
+                count++;
+                if(count>=5){
+                    throw new APIException("Vui lòng thử lại sao");
+                }
+            }
+        }
 
 
-
-        // hung giờ trùng ±1 tiếng
         LocalDateTime fromTime = request.getBookingTime().minusHours(1);
         LocalDateTime toTime = request.getBookingTime().plusHours(1);
 
@@ -119,9 +132,7 @@ public class TableBookingServiceImpl implements TableBookingService {
                                 "Rất tiếc, đã hết bàn trong khung giờ này. Vui lòng chọn thời gian khác."
                         )
                 );
-        if (tableBookingRepo.existsByCustomerPhone(request.getCustomerPhone())) {
-            throw new APIException("Số diện thoại đã được đăng ký, nếu quý khách có thể gặp nhân viên tại quầy thu ngân");
-        }
+
         TableBooking booking = modelMapper.map(request, TableBooking.class);
         booking.setTable(table);
         booking.setStatus(BookingStatus.PENDING);
@@ -152,13 +163,7 @@ public class TableBookingServiceImpl implements TableBookingService {
         response.setTableName(table.getTableName());
         response.setSeatCount(table.getSeatCount().intValue());
 
-        messagingTemplate.convertAndSend(
-                "/topic/booking",
-                Map.of(
-                        "event", "BOOKING_CREATED",
-                        "data", response
-                )
-        );
+        webSocket("BOOKING_CREATED", response);
         return response;
     }
 
@@ -212,13 +217,7 @@ public class TableBookingServiceImpl implements TableBookingService {
         response.setSeatCount(savedBooking.getTable().getSeatCount().intValue());
 
         // 7. Websocket notify
-        messagingTemplate.convertAndSend(
-                "/topic/booking",
-                Map.of(
-                        "event", "BOOKING_CONFIRMED",
-                        "data", response
-                )
-        );
+        webSocket("BOOKING_CONFIRMED", response);
 
         return response;
     }
@@ -284,13 +283,7 @@ public class TableBookingServiceImpl implements TableBookingService {
         response.setTableName(savedBooking.getTable().getTableName());
         response.setSeatCount(savedBooking.getTable().getSeatCount().intValue());
 
-        messagingTemplate.convertAndSend(
-                "/topic/booking",
-                Map.of(
-                        "event", "BOOKING_CANCELLED",
-                        "data", response
-                )
-        );
+        webSocket("BOOKING_CANCELLED", response);
         return response;
     }
 
@@ -344,13 +337,7 @@ public class TableBookingServiceImpl implements TableBookingService {
         response.setTableStatus(booking.getTable().getStatus());
         response.setSeatCount(savedBooking.getTable().getSeatCount().intValue());
 
-        messagingTemplate.convertAndSend(
-                "/topic/booking",
-                Map.of(
-                        "event", "BOOKING_CHECKED_IN",
-                        "data", response
-                )
-        );
+        webSocket("BOOKING_CHECKED_IN", response);
 
         return response;
     }
@@ -408,13 +395,7 @@ public class TableBookingServiceImpl implements TableBookingService {
         response.setTableName(savedBooking.getTable().getTableName());
         response.setSeatCount(savedBooking.getTable().getSeatCount().intValue());
 
-        messagingTemplate.convertAndSend(
-                "/topic/booking",
-                Map.of(
-                        "event", "BOOKING_COMPLETED",
-                        "data", response
-                )
-        );
+        webSocket("BOOKING_COMPLETED", response);
 
         return response;
     }
@@ -470,13 +451,7 @@ public class TableBookingServiceImpl implements TableBookingService {
             dto.setBookingTime(savedBooking.getBookingTime());
             dto.setStatus(BookingStatus.NO_SHOW);
 
-            messagingTemplate.convertAndSend(
-                    "/topic/booking",
-                    Map.of(
-                            "event", "BOOKING_NO_SHOW_AUTO",
-                            "data", dto
-                    )
-            );
+            webSocket("BOOKING_NO_SHOW_AUTO", dto);
         }
     }
 

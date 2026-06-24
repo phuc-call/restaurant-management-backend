@@ -107,4 +107,5 @@ public interface TableBookingRepo extends JpaRepository<TableBooking, Long> {
             Long tableId,
             List<BookingStatus> statuses
     );
+    List<TableBooking>findByCustomerPhone(String phone);
 }

@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 @Service
 @AllArgsConstructor
 @Transactional
-public class AutoWorkShiftServiceImpl implements AutoWorkShiftService {
+public class  AutoWorkShiftServiceImpl implements AutoWorkShiftService {
     private final UserRepo userRepo;
     private final WorkShiftRepo workShiftRepo;
     @Autowired

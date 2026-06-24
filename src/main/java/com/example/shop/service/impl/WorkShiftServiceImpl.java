@@ -37,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.*;
 
 import java.util.stream.Collectors;
@@ -369,7 +370,7 @@ public class WorkShiftServiceImpl implements WorkShiftService {
     public ShiftStatisticResponse getShiftStatistic(LocalDate from, LocalDate to) {
         Long userId = SecuritySnapshotUtil.getUserId();
         if (userId == null) {
-            throw new APIException("Không tìm thấy user");
+            throw new APIException("Not found user");
         }
         User user = getAccountUserAndStatusUser(userId);
         List<WorkShiftOverview> statistics = workShiftRepo.getShiftStatistic(from, to);
@@ -380,9 +381,38 @@ public class WorkShiftServiceImpl implements WorkShiftService {
         return statisticResponse;
     }
 
+    //not yet create api
+    public String deleteWorkShift(Long workShiftId,Boolean force){
+        WorkShift workShift=workShiftRepo.findById(workShiftId).orElseThrow(()->new APIException("The work schedule"));
+        if(!force && workShift.getStaff() != null){
+            throw new APIException("WorkShift already has employees");
+        }
+        userRepo.deleteById(workShiftId);
+        return "Delete success";
+    }
+    public Map<Long,Long> findStopStaffShiftCount(
+            LocalDate dataFrom, LocalDate dataTo, List<LocalDate> removalTime,Long topWorkShift){
+        if(dataFrom.isAfter(dataTo)){
+            throw new APIException("The time format is incorrect; it should be "+ dataFrom +" instead of "+ dataTo);
+        }
+        List<WorkShift> workShift=workShiftRepo.findByWorkDateBetween(dataFrom,dataTo);
+        if(removalTime!=null){
+            for(LocalDate d:removalTime){
+                if(d.isBefore(dataFrom)||d.isAfter(dataTo)){
+                    throw new APIException("Removal data must be within range");
+                }
+            }
+        }
+        Map<Long, Long>userAndShift=new HashMap<>();
+       for(WorkShift ws: workShift){
+           if(removalTime!=null&&removalTime.contains(ws.getWorkDate())){
+               continue;
+           }
+           Long userId=ws.getStaff().getUserId();
+           userAndShift.put(userId,userAndShift.getOrDefault(userId,0L)+1);
 
+       }
+        Map<Long, Long >userAndShift=new HashMap<>();
 
-
-
-
+    }
 }
